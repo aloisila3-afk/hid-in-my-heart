@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Hid in My Heart</title>
+<meta name="description" content="Memorise Bible passages by typing the first letter of each word.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow reading column — picker, reference, typing bar, then the passage as a page of scripture with red rubrics. */
+:root{
+  --paper:#F4F5F7; --surface:#FFFFFF; --ink:#1B2233; --muted:#6B7282; --line:#CDD2DC; --faint:#B7BDC9;
+  --rubric:#B3261E; --rubric-soft:#B3261E14; --good:#2F6B4F;
+  --serif:"EB Garamond", Georgia, "Times New Roman", serif;
+  --sans:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#11141B; --surface:#191E28; --ink:#E7E9EE; --muted:#8C93A2; --line:#343B49; --faint:#4A5262;
+  --rubric:#F2756B; --rubric-soft:#F2756B1F; --good:#7CC59F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#11141B; --surface:#191E28; --ink:#E7E9EE; --muted:#8C93A2; --line:#343B49; --faint:#4A5262;
+  --rubric:#F2756B; --rubric-soft:#F2756B1F; --good:#7CC59F; color-scheme:dark}
+
+*{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5}
+.wrap{max-width:640px;margin:0 auto;padding-block:20px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));
+  display:flex;flex-direction:column;gap:18px}
+
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--serif);font-size:1.25rem;font-weight:600;color:var(--rubric);letter-spacing:.01em}
+.brand small{font-family:var(--sans);font-size:.72rem;font-weight:500;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-left:8px}
+
+label.lbl{display:block;font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+select,input[type=text],textarea{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{min-height:140px;resize:vertical;font-family:var(--serif);font-size:17px;line-height:1.5}
+select:focus-visible,input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--rubric);outline-offset:2px}
+
+.ref{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.ref h1{margin:0;font-family:var(--serif);font-weight:500;font-size:2rem;line-height:1.1;text-wrap:balance}
+.ref .tr{font-size:.75rem;font-weight:600;letter-spacing:.08em;color:var(--muted)}
+
+.bar{display:flex;gap:8px;align-items:stretch;flex-wrap:wrap;position:sticky;top:env(safe-area-inset-top, 0px);z-index:5;
+  background:var(--paper);padding-block:8px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top, 0px);z-index:10;background:var(--paper)}
+.typer{flex:1 1 180px;min-width:0;position:relative}
+.typer input{border-width:1.5px;border-color:var(--rubric);font-family:var(--sans);caret-color:var(--rubric)}
+.typer input::placeholder{color:var(--muted)}
+.typer.shake input{animation:shake .25s}
+@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+button{font:inherit;font-size:.9rem;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;padding:9px 14px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button.primary{background:var(--rubric);border-color:var(--rubric);color:var(--paper)}
+button.ghost{background:transparent;border-color:transparent;color:var(--muted);padding-inline:8px}
+
+.modes{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.modes button{border:0;border-radius:0;padding:7px 12px;font-size:.82rem;color:var(--muted);background:transparent}
+.modes button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.stats{font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.stats b{color:var(--ink);font-weight:600}
+.stats .x{color:var(--rubric)}
+.progress{height:3px;background:var(--line);border-radius:2px;overflow:hidden}
+.progress i{display:block;height:100%;width:0;background:var(--rubric);transition:width .2s}
+
+.text{font-family:var(--serif);font-size:1.3rem;line-height:2.05;cursor:text;min-width:0;overflow-wrap:anywhere}
+.w{white-space:nowrap}
+.w .c{border-bottom:1.5px solid transparent;transition:color .15s}
+.w.todo .p{color:var(--faint)}
+.mode-blank .w.todo .c{color:transparent;border-bottom-color:var(--line)}
+.mode-letters .w.todo .c{border-bottom-color:var(--line)}
+.mode-letters .w.todo .r{color:transparent}
+.mode-letters .w.todo .f{color:var(--muted)}
+.mode-faded .w.todo .c{color:var(--faint)}
+.w.now .c{border-bottom:2.5px solid var(--rubric)}
+.w.miss .c{color:var(--rubric)}
+.w.pop .c{animation:pop .22s}
+@keyframes pop{from{background:var(--rubric-soft)}to{background:transparent}}
+.p.static{color:var(--muted)}
+.vn{font-family:var(--sans);font-size:.6em;font-weight:600;color:var(--rubric);margin-right:2px;vertical-align:.7em;line-height:0}
+.range{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.82rem;color:var(--muted)}
+.range select{width:auto;padding:6px 10px;font-size:16px}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.panel h2{margin:0;font-family:var(--serif);font-weight:500;font-size:1.5rem}
+.score{display:flex;gap:22px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.score div{display:flex;flex-direction:column}
+.score b{font-family:var(--serif);font-size:2rem;font-weight:500;line-height:1}
+.score span{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.note{font-size:.82rem;color:var(--muted);margin:0}
+.foot{font-size:.78rem;color:var(--muted);border-top:1px solid var(--line);padding-top:12px}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+.status{font-size:.85rem;color:var(--muted);margin:0}
+.status.err{color:var(--rubric)}
+.foot p{margin:0 0 6px}
+.pinrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pinrow input{width:8em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Hid in My Heart <small>Psalm 119:11</small></div>
+  </header>
+
+  <div>
+    <label class="lbl" for="pick">Passage</label>
+    <select id="pick"></select>
+  </div>
+
+  <form id="addForm" class="panel" hidden>
+    <h2>Add your own passage</h2>
+    <p class="note">Copy the passage from your Bible app (e.g. YouVersion or Bible Gateway, NIV) <b>with verse numbers on</b> and paste it here. Verse numbers let you practise any range within it. Everyone who opens this site will see it.</p>
+    <div><label class="lbl" for="newRef">Reference</label><input type="text" id="newRef" placeholder="e.g. 1 Corinthians 6:12–20" autocomplete="off"></div>
+    <div><label class="lbl" for="newTr">Translation</label><input type="text" id="newTr" placeholder="NIV" value="NIV" autocomplete="off"></div>
+    <div><label class="lbl" for="newText">Passage text</label><textarea id="newText" placeholder="Paste the verses here…"></textarea></div>
+    <p class="status" id="addStatus"></p>
+    <div class="actions"><button class="primary" type="submit" id="saveBtn">Save and start</button><button type="button" id="cancelAdd">Cancel</button></div>
+  </form>
+
+  <section id="game">
+    <div class="ref"><h1 id="refTitle"></h1><span class="tr" id="refTr"></span><button class="ghost" id="delBtn" type="button" hidden>Delete</button></div>
+    <form class="pinrow" id="delForm" hidden style="margin-top:8px">
+      <label for="delPin" class="status">Enter the PIN to delete this passage for everyone</label>
+      <input type="password" id="delPin" inputmode="numeric" autocomplete="off">
+      <button type="submit" class="primary">Delete</button><button type="button" id="delCancel">Cancel</button>
+      <span class="status err" id="delStatus"></span>
+    </form>
+
+    <div class="bar">
+      <div class="typer" id="typer">
+        <input type="text" id="key" placeholder="Type the first letter of each word" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="next" aria-label="Type the first letter of the next word">
+      </div>
+      <button type="button" id="hintBtn" title="Reveal the next word (counts as a miss)">Hint</button>
+      <button type="button" id="restartBtn">Restart</button>
+    </div>
+
+    <div class="row" style="margin-top:6px">
+      <div class="modes" role="group" aria-label="How much text to show">
+        <button type="button" data-mode="faded">Faded</button>
+        <button type="button" data-mode="letters">First letters</button>
+        <button type="button" data-mode="blank">Blank</button>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="range" id="rangeRow" hidden style="margin-top:10px">
+      <label for="vFrom">Verses</label><select id="vFrom"></select>
+      <label for="vTo">to</label><select id="vTo"></select>
+      <button type="button" class="ghost" id="allBtn">All</button>
+    </div>
+    <div class="progress" style="margin-top:12px"><i id="prog"></i></div>
+
+    <div class="text" id="text" style="margin-top:14px"></div>
+
+    <div class="panel" id="done" hidden style="margin-top:18px">
+      <h2 id="doneTitle">Passage complete</h2>
+      <div class="score">
+        <div><b id="sAcc"></b><span>Accuracy</span></div>
+        <div><b id="sMiss"></b><span>Missed</span></div>
+        <div><b id="sTime"></b><span>Time</span></div>
+        <div><b id="sBest"></b><span>Best</span></div>
+      </div>
+      <p class="note" id="doneTip"></p>
+      <div class="actions"><button class="primary" type="button" id="againBtn">Go again</button><button type="button" id="harderBtn">Try a harder mode</button></div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <p id="syncNote"></p>
+    <p>Words in red are ones you missed. Three wrong letters on a word reveals it. Built-in verses are KJV (public domain).</p>
+    <p id="nivNote" hidden>Scripture quotations marked NIV are taken from the Holy Bible, New International Version®, NIV®. Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.® Used by permission. All rights reserved worldwide.</p>
+  </div>
+</div>
+
+<script>
+/* Shared passage database (Supabase). Fill these in from Project Settings → API. */
+const SUPABASE_URL = "";
+const SUPABASE_KEY = "";
+
+const PRESETS = [
+  {id:"jhn-3-16", ref:"John 3:16", tr:"KJV", text:"For God so loved the world, that he gave his only begotten Son, that whosoever believeth in him should not perish, but have everlasting life."},
+  {id:"pro-3-5", ref:"Proverbs 3:5–6", tr:"KJV", text:"Trust in the LORD with all thine heart; and lean not unto thine own understanding. In all thy ways acknowledge him, and he shall direct thy paths."},
+  {id:"jos-1-9", ref:"Joshua 1:9", tr:"KJV", text:"Have not I commanded thee? Be strong and of a good courage; be not afraid, neither be thou dismayed: for the LORD thy God is with thee whithersoever thou goest."},
+  {id:"php-4-6", ref:"Philippians 4:6–7", tr:"KJV", text:"Be careful for nothing; but in every thing by prayer and supplication with thanksgiving let your requests be made known unto God. And the peace of God, which passeth all understanding, shall keep your hearts and minds through Christ Jesus."},
+  {id:"rom-8-28", ref:"Romans 8:28", tr:"KJV", text:"And we know that all things work together for good to them that love God, to them who are the called according to his purpose."},
+  {id:"isa-40-31", ref:"Isaiah 40:31", tr:"KJV", text:"But they that wait upon the LORD shall renew their strength; they shall mount up with wings as eagles; they shall run, and not be weary; and they shall walk, and not faint."},
+  {id:"mat-6-33", ref:"Matthew 6:33", tr:"KJV", text:"But seek ye first the kingdom of God, and his righteousness; and all these things shall be added unto you."},
+  {id:"jer-29-11", ref:"Jeremiah 29:11", tr:"KJV", text:"For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil, to give you an expected end."},
+  {id:"2ti-1-7", ref:"2 Timothy 1:7", tr:"KJV", text:"For God hath not given us the spirit of fear; but of power, and of love, and of a sound mind."},
+  {id:"psa-119-11", ref:"Psalm 119:11", tr:"KJV", text:"Thy word have I hid in mine heart, that I might not sin against thee."},
+  {id:"psa-23", ref:"Psalm 23", tr:"KJV", text:"The LORD is my shepherd; I shall not want. He maketh me to lie down in green pastures: he leadeth me beside the still waters. He restoreth my soul: he leadeth me in the paths of righteousness for his name's sake. Yea, though I walk through the valley of the shadow of death, I will fear no evil: for thou art with me; thy rod and thy staff they comfort me. Thou preparest a table before me in the presence of mine enemies: thou anointest my head with oil; my cup runneth over. Surely goodness and mercy shall follow me all the days of my life: and I will dwell in the house of the LORD for ever."}
+];
+
+const KEY = "hidInMyHeart.v1";
+let store = {custom:[], last:"jhn-3-16", mode:"letters", best:{}};
+try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s) store = Object.assign(store, s); } catch(e) {}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(store)); } catch(e) {} }
+
+const $ = id => document.getElementById(id);
+const pick=$("pick"), textEl=$("text"), keyEl=$("key"), typer=$("typer");
+let passage, tokens=[], targets=[], idx=0, misses=0, tries=0, missedWords=0, startT=0, endT=0;
+
+const norm = ch => ch.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
+let SHARED = [];
+try { SHARED = JSON.parse(localStorage.getItem(KEY + ".shared") || "[]"); } catch(e) {}
+const all = () => PRESETS.concat(SHARED, store.custom);
+const online = !!(SUPABASE_URL && SUPABASE_KEY);
+
+function api(path, opts = {}){
+  const h = {"apikey": SUPABASE_KEY, "Content-Type": "application/json"};
+  if (SUPABASE_KEY.startsWith("eyJ")) h.Authorization = "Bearer " + SUPABASE_KEY;
+  return fetch(SUPABASE_URL.replace(/\/$/, "") + "/rest/v1/" + path, Object.assign({headers: h}, opts)).then(async res => {
+    const body = await res.text();
+    let data = null; try { data = body ? JSON.parse(body) : null; } catch(e) {}
+    if (!res.ok) throw new Error((data && (data.message || data.hint)) || ("Error " + res.status));
+    return data;
+  });
+}
+async function refreshShared(){
+  if (!online) { $("syncNote").textContent = "Shared passages aren't connected yet, so passages you add are saved on this device only."; return; }
+  try {
+    const rows = await api("passages?select=id,ref,tr,text&order=created_at.asc");
+    SHARED = rows.map(p => ({id:"s-" + p.id, dbId:p.id, ref:p.ref, tr:p.tr || "", text:p.text, shared:true}));
+    try { localStorage.setItem(KEY + ".shared", JSON.stringify(SHARED)); } catch(e) {}
+    $("syncNote").textContent = "Passages you add are shared with everyone who opens this site.";
+  } catch(e) {
+    $("syncNote").textContent = "Couldn't reach the shared passages right now. Showing the last copy saved on this device.";
+  }
+  const cur = passage && passage.id;
+  buildPicker();
+  if (cur && all().some(p => p.id === cur)) pick.value = cur; else load(store.last);
+  $("nivNote").hidden = !all().some(p => /NIV/i.test(p.tr || ""));
+}
+
+function buildPicker(){
+  pick.innerHTML = "";
+  const g1 = document.createElement("optgroup"); g1.label = "Classic verses (KJV)";
+  PRESETS.forEach(p => g1.append(new Option(p.ref, p.id)));
+  pick.append(g1);
+  if (SHARED.length){
+    const gs = document.createElement("optgroup"); gs.label = "Shared passages";
+    SHARED.forEach(p => gs.append(new Option(p.ref + (p.tr ? " (" + p.tr + ")" : ""), p.id)));
+    pick.append(gs);
+  }
+  if (store.custom.length){
+    const g2 = document.createElement("optgroup"); g2.label = "On this device only";
+    store.custom.forEach(p => g2.append(new Option(p.ref, p.id)));
+    pick.append(g2);
+  }
+  pick.append(new Option("＋ Add your own passage…", "__add"));
+}
+
+function load(id){
+  passage = all().find(p => p.id === id) || PRESETS[0];
+  store.last = passage.id; save();
+  pick.value = passage.id;
+  $("refTitle").textContent = passage.ref;
+  $("refTr").textContent = passage.tr || "";
+  $("delBtn").hidden = !(passage.custom || passage.shared);
+  $("delForm").hidden = true;
+  setupRange();
+  restart();
+}
+
+function parseVerses(text){
+  const out = [{num:null, toks:[]}];
+  text.trim().split(/\s+/).forEach(tok => {
+    const m = tok.match(/^(?:\d+:)?(\d{1,3})(?=$|[^\p{N},.])(.*)$/u);
+    if (m){ out.push({num:m[1], toks:[]}); if (m[2]) out[out.length-1].toks.push(m[2]); }
+    else out[out.length-1].toks.push(tok);
+  });
+  return out.filter(v => v.toks.length);
+}
+let verses = [];
+function setupRange(){
+  verses = parseVerses(passage.text);
+  const numbered = verses.filter(v => v.num).length > 1;
+  $("rangeRow").hidden = !numbered;
+  if (!numbered) return;
+  ["vFrom","vTo"].forEach(id => { const s=$(id); s.innerHTML=""; verses.forEach((v,i)=>s.append(new Option(v.num || "intro", i))); });
+  $("vFrom").value = 0; $("vTo").value = verses.length - 1;
+}
+function rangeKey(){ return $("rangeRow").hidden ? "" : ":" + $("vFrom").value + "-" + $("vTo").value; }
+
+function restart(){
+  tokens = []; targets = [];
+  textEl.innerHTML = "";
+  let a = 0, b = verses.length - 1;
+  if (!$("rangeRow").hidden){ a = +$("vFrom").value; b = +$("vTo").value; if (b < a){ [a,b]=[b,a]; } }
+  const toks = [];
+  verses.slice(a, b + 1).forEach(v => { if (v.num) toks.push({vn:v.num}); v.toks.forEach(t => toks.push(t)); });
+  toks.forEach((tok, n) => {
+    if (n) textEl.append(" ");
+    if (tok.vn){ const s=document.createElement("sup"); s.className="vn"; s.textContent=tok.vn; textEl.append(s); return; }
+    const m = tok.match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u);
+    const core = m ? m[2] : "";
+    if (!core){ const s=document.createElement("span"); s.className="p static"; s.textContent=tok; textEl.append(s); return; }
+    const w = document.createElement("span"); w.className = "w todo";
+    const lead = document.createElement("span"); lead.className="p"; lead.textContent = m[1];
+    const c = document.createElement("span"); c.className = "c";
+    const f = document.createElement("span"); f.className="f"; f.textContent = core[0];
+    const r = document.createElement("span"); r.className="r"; r.textContent = core.slice(1);
+    c.append(f, r);
+    const trail = document.createElement("span"); trail.className="p"; trail.textContent = m[3];
+    w.append(lead, c, trail);
+    textEl.append(w);
+    targets.push({el:w, letter:norm(core[0])});
+  });
+  idx = 0; tries = 0; missedWords = 0; startT = 0; endT = 0;
+  $("done").hidden = true;
+  keyEl.disabled = false; $("hintBtn").disabled = false;
+  mark(); stats();
+}
+
+function mark(){
+  targets.forEach((t,i) => t.el.classList.toggle("now", i === idx));
+  const cur = targets[idx];
+  if (cur) {
+    const r = cur.el.getBoundingClientRect();
+    if (r.top < 90 || r.bottom > window.innerHeight - 40) cur.el.scrollIntoView({block:"center", behavior:"smooth"});
+  }
+}
+
+function advance(missed){
+  const t = targets[idx];
+  t.el.classList.remove("todo","now");
+  if (missed){ t.el.classList.add("miss"); missedWords++; }
+  t.el.classList.add("pop");
+  idx++; tries = 0;
+  if (idx >= targets.length) finish(); else mark();
+  stats();
+}
+
+function press(ch){
+  if (idx >= targets.length) return;
+  const k = norm(ch);
+  if (!/[\p{L}\p{N}]/u.test(k)) return;
+  if (!startT) startT = Date.now();
+  if (k === targets[idx].letter) { advance(tries > 0); }
+  else {
+    tries++;
+    typer.classList.remove("shake"); void typer.offsetWidth; typer.classList.add("shake");
+    if (tries >= 3) advance(true); else stats();
+  }
+}
+
+function stats(){
+  const n = targets.length, done = idx;
+  $("prog").style.width = (n ? done/n*100 : 0) + "%";
+  $("stats").innerHTML = `<b>${done}</b> / ${n} words · <span class="${missedWords?'x':''}">${missedWords} missed</span>`;
+}
+
+function fmt(ms){ const s=Math.round(ms/1000); return s<60 ? s+"s" : Math.floor(s/60)+"m "+String(s%60).padStart(2,"0")+"s"; }
+
+function finish(){
+  endT = Date.now();
+  const n = targets.length, acc = Math.round((n - missedWords)/n*100);
+  const key = passage.id + ":" + store.mode + rangeKey();
+  const prev = store.best[key];
+  if (prev == null || acc > prev) { store.best[key] = acc; save(); }
+  $("sAcc").textContent = acc + "%";
+  $("sMiss").textContent = missedWords;
+  $("sTime").textContent = fmt(endT - (startT || endT));
+  $("sBest").textContent = store.best[key] + "%";
+  const modeName = {faded:"Faded", letters:"First letters", blank:"Blank"}[store.mode];
+  $("doneTitle").textContent = acc === 100 ? "Word perfect" : "Passage complete";
+  $("doneTip").textContent = acc === 100
+    ? (store.mode === "blank" ? "You have this one by heart. Come back tomorrow to keep it there." : `Perfect in ${modeName} mode. Move up to a harder mode next.`)
+    : `Best in ${modeName} mode: ${store.best[key]}%. The red words are the ones to practise.`;
+  $("harderBtn").hidden = store.mode === "blank";
+  $("done").hidden = false;
+  keyEl.blur(); keyEl.disabled = true; $("hintBtn").disabled = true;
+  targets.forEach(t => t.el.classList.remove("now"));
+  $("done").scrollIntoView({block:"nearest", behavior:"smooth"});
+}
+
+function setMode(m){
+  store.mode = m; save();
+  textEl.className = "text mode-" + m;
+  document.querySelectorAll(".modes button").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === m));
+}
+
+keyEl.addEventListener("input", () => { const v = keyEl.value; keyEl.value = ""; for (const ch of v) press(ch); });
+textEl.addEventListener("click", () => { if (!keyEl.disabled) keyEl.focus(); });
+$("hintBtn").addEventListener("click", () => { if (idx < targets.length){ if(!startT) startT=Date.now(); advance(true); } keyEl.focus(); });
+$("restartBtn").addEventListener("click", () => { restart(); keyEl.focus(); });
+$("againBtn").addEventListener("click", () => { restart(); keyEl.focus(); });
+$("harderBtn").addEventListener("click", () => { setMode(store.mode === "faded" ? "letters" : "blank"); restart(); keyEl.focus(); });
+["vFrom","vTo"].forEach(id => $(id).addEventListener("change", () => restart()));
+$("allBtn").addEventListener("click", () => { $("vFrom").value = 0; $("vTo").value = verses.length - 1; restart(); });
+document.querySelectorAll(".modes button").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+pick.addEventListener("change", () => {
+  if (pick.value === "__add"){ $("addForm").hidden = false; $("game").hidden = true; pick.value = passage.id; $("newRef").focus(); }
+  else load(pick.value);
+});
+$("cancelAdd").addEventListener("click", () => { $("addForm").hidden = true; $("game").hidden = false; });
+$("addForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const ref = $("newRef").value.trim(), text = $("newText").value.trim(), tr = $("newTr").value.trim().toUpperCase();
+  if (!ref || !text){ (ref ? $("newText") : $("newRef")).focus(); return; }
+  let id;
+  if (online){
+    $("saveBtn").disabled = true; $("addStatus").className = "status"; $("addStatus").textContent = "Saving…";
+    try {
+      const newId = await api("rpc/add_passage", {method:"POST", body: JSON.stringify({p_ref:ref, p_tr:tr, p_text:text})});
+      id = "s-" + newId; store.last = id; save();
+      await refreshShared();
+    } catch(err) {
+      $("saveBtn").disabled = false; $("addStatus").className = "status err";
+      $("addStatus").textContent = "Couldn't save the passage: " + err.message + ". Check your connection and try again.";
+      return;
+    }
+    $("saveBtn").disabled = false; $("addStatus").textContent = "";
+  } else {
+    id = "c" + Date.now();
+    store.custom.push({id, ref, text, tr, custom:true}); save();
+    buildPicker();
+  }
+  $("newRef").value = ""; $("newText").value = "";
+  $("addForm").hidden = true; $("game").hidden = false;
+  load(id);
+});
+$("delCancel").addEventListener("click", () => { $("delForm").hidden = true; });
+$("delForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("delStatus").textContent = "Deleting…";
+  try {
+    await api("rpc/delete_passage", {method:"POST", body: JSON.stringify({p_pin: $("delPin").value, p_id: passage.dbId})});
+    $("delPin").value = ""; $("delForm").hidden = true; $("delStatus").textContent = "";
+    store.last = PRESETS[0].id; save();
+    await refreshShared(); load(PRESETS[0].id);
+  } catch(err) {
+    $("delStatus").textContent = /pin/i.test(err.message) ? "That PIN isn't right." : "Couldn't delete: " + err.message;
+  }
+});
+let delArmed = false;
+$("delBtn").addEventListener("click", () => {
+  if (passage.shared){ $("delForm").hidden = false; $("delStatus").textContent = ""; $("delPin").focus(); return; }
+  if (!delArmed){ delArmed = true; $("delBtn").textContent = "Tap again to delete"; setTimeout(()=>{delArmed=false; $("delBtn").textContent="Delete";}, 3000); return; }
+  delArmed = false; $("delBtn").textContent = "Delete";
+  store.custom = store.custom.filter(p => p.id !== passage.id); save();
+  buildPicker(); load(PRESETS[0].id);
+});
+
+buildPicker();
+setMode(store.mode);
+load(store.last);
+$("nivNote").hidden = !all().some(p => /NIV/i.test(p.tr || ""));
+refreshShared();
+</script>
+</body>
+</html>
